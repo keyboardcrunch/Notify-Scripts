@@ -11,18 +11,17 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.firefox.options import Options
 
 # global variables
-notify_service = 'telegram' # telegram, pushover
+notify_service = "telegram" # telegram, pushover
 secrets_path = "/home/user/.mysecrets.ini"
 site_login = "https://my.parcelpending.com/login"
-parcels = "https://my.parcelpending.com/parcel-history?package_status=1001"
- 
+package_history = "https://my.parcelpending.com/parcel-history?package_status=1001"
+
 def PONotify(package):
     import pushover
     ps = pushover.PushoverClient(secrets_path)
     ps.send_message(package, title="Parcel Pending")
 
 def TGNotify(tgapi, tguser, package):
-    # Feel free to get fancy with the notice message, I went vanilla here.
     import telebot
     bot = telebot.AsyncTeleBot(tgapi)
     bot.send_message(tguser, package)
@@ -37,7 +36,7 @@ def GetParcels(ppuser, pppass):
     driver.find_element_by_name("username").send_keys(ppuser)
     driver.find_element_by_name("password").send_keys(pppass)
     driver.find_element_by_tag_name("button").click()
-    driver.get(parcels)
+    driver.get(package_history)
     package_panel = driver.find_element_by_xpath("//section[@class='panel'][2]")
     if package_panel.text == "There are no packages that match the specified criteria.":
         print("No packages")
@@ -45,11 +44,10 @@ def GetParcels(ppuser, pppass):
         quit()
     else:
         table = driver.find_element_by_xpath("/html/body/section/div/section/section/section[2]/div/div[1]/table/tbody")
-        rows = table.find_elements(By.TAG_NAME, "tr")
-        for row in rows:
-            col = row.find_elements(By.TAG_NAME, "td")
-            parcel = col[2]
-            packages.append(parcel.text)
+        table_data = table.text
+        for line in table_data.split('\n\n'):
+            if line.startswith('Package Code:'):
+                packages.append(line)
         driver.quit()
         return packages
     
@@ -61,17 +59,13 @@ if __name__ == "__main__":
     username = config['parcelpending']['username']
     password = config['parcelpending']['password']
 
-    parcels = GetParcels(username, password)
-
-    if notify_service == "pushover":
-        for parcel in parcels:
+    p = GetParcels(username, password)
+    for parcel in p:
+        if notify_service == "pushover":
             PONotify(parcel)
-    if notify_service == "telegram":
-        tgapi = config['telegram']["my_telegram_bot"]
-        tguser = config['telegram']["my_telegram_user_id"]
-        for parcel in parcels:
+        if notify_service == "telegram":
+            tgapi = config['telegram']["notifybot"]
+            tguser = config['telegram']["unaffiliatedcyber"]
             TGNotify(tgapi, tguser, parcel)
-    else:
-        print("No notifications enabled. The following parcels are pending pickup:\r\n")
-        for parcel in parcels:
+        else:
             print(parcel)
